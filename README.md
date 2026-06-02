@@ -40,13 +40,17 @@ on each training window and then applied to the held-out window.
   values are dropped; prediction rows with missing feature/regime values are
   dropped.
 - Feature outliers: `x*` features are clipped to `[-3, 3]`.
-- Target outliers: `ret_fopen` is winsorized on the training window using the
-  1st and 99th percentiles.
+- Training target outliers: `ret_fopen` is winsorized only inside the training
+  window used to fit the model, using the 1st and 99th percentiles. This is used
+  to reduce the influence of extreme target observations during estimation.
 - Regime variables: `cond*` variables are winsorized on the training window using
   the 1st and 99th percentiles, standardized using training-window mean/std, and
   finally clipped to `[-5, 5]`.
+- Backtest returns: realized `ret_fopen` values are not clipped or winsorized in
+  the backtest.
 - Backtest signal: predictions are clipped to `[-3, 3]` before computing daily
-  PnL and Sharpe.
+  PnL and Sharpe, so clipping applies to position sizing rather than realized
+  returns.
 
 ## Modeling Assumption
 
