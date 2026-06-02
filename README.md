@@ -7,7 +7,7 @@ features.
 
 - Base linear model
 - Mixture-of-experts model
-- Pooled model
+- Partial-pooling regime ridge model
 - Transformer model
 - XGBoost model
 
@@ -62,24 +62,45 @@ The richer models impose the prior that:
 
 Examples:
 
-- The pooled and mixture-of-experts notebooks use regime variables to define or
-  learn conditional model structure around simpler linear predictors.
+- The partial-pooling regime ridge notebook uses regime variables to create
+  quantile groups. Each group gets a regularized deviation from a shared global
+  linear model, so the model can adapt to regimes without fitting a completely
+  separate model per regime bucket.
+- The mixture-of-experts notebook learns a soft regime-dependent combination of
+  simpler linear experts.
 - The transformer notebook tests architectures where feature tokens and regime
   tokens are separate, with the selected architecture using one-way
   regime-to-feature attention.
 - The XGBoost notebook uses interaction constraints so each feature can interact
   with regime variables, while feature-feature interactions are restricted.
 
+## Partial-Pooling Regime Ridge
+
+The pooled model is better described as a partial-pooling regime ridge model. It
+is not a simple average of models. For a chosen regime variable, the training
+data is split into quantile buckets using training-window quantiles. The model
+then fits:
+
+```text
+prediction = x * beta_shared + x * delta_regime_bucket
+```
+
+`beta_shared` is the global linear signal shared across all observations.
+`delta_regime_bucket` is the regime-specific adjustment. Both pieces are ridge
+regularized, with separate penalties for the shared component and the
+regime-specific deviations. This gives a compromise between one global linear
+model and fully separate models per regime bucket.
+
 ## Train, Validation, And Test Protocol
 
 The notebooks use two related protocols.
 
-For the linear, pooled, and mixture-of-experts notebooks, evaluation is
-walk-forward by calendar year. With the default expanding-window setup, the model
-starts after at least four training years are available. For each prediction
-year, it trains on all earlier eligible years, predicts the next year, then
-expands the training set to include that year before moving forward. This gives
-out-of-sample yearly predictions while preserving time order.
+For the linear, partial-pooling regime ridge, and mixture-of-experts notebooks,
+evaluation is walk-forward by calendar year. With the default expanding-window
+setup, the model starts after at least four training years are available. For
+each prediction year, it trains on all earlier eligible years, predicts the next
+year, then expands the training set to include that year before moving forward.
+This gives out-of-sample yearly predictions while preserving time order.
 
 For the transformer and XGBoost notebooks, the main model-selection protocol is
 a fixed split:
