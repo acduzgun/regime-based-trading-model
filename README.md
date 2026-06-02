@@ -70,6 +70,32 @@ Examples:
 - The XGBoost notebook uses interaction constraints so each feature can interact
   with regime variables, while feature-feature interactions are restricted.
 
+## Train, Validation, And Test Protocol
+
+The notebooks use two related protocols.
+
+For the linear, pooled, and mixture-of-experts notebooks, evaluation is
+walk-forward by calendar year. With the default expanding-window setup, the model
+starts after at least four training years are available. For each prediction
+year, it trains on all earlier eligible years, predicts the next year, then
+expands the training set to include that year before moving forward. This gives
+out-of-sample yearly predictions while preserving time order.
+
+For the transformer and XGBoost notebooks, the main model-selection protocol is
+a fixed split:
+
+- Training period: all rows through `2021-12-31`.
+- Outer validation period: `2022-01-01` through `2023-06-30`.
+- Inner validation: a chronological tail slice from the training period, used
+  for early stopping and learning-curve diagnostics.
+- Test period: starts on `2023-07-01`.
+
+After selecting the model/hyperparameters on the outer validation period, the
+final test run retrains the selected configuration through `2023-06-30` and then
+predicts rows from `2023-07-01` onward. Thus validation data is allowed into the
+final training set only after model selection is complete; test rows remain held
+out.
+
 For Modal-backed notebooks, upload the local data file once:
 
 ```bash
