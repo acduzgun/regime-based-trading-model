@@ -1,0 +1,10 @@
+pandas>=2.0
+numpy
+scikit-learn
+xgboost==1.7.6
+torch
+pyarrow
+matplotlib
+modal
+ipython
+jupyter
