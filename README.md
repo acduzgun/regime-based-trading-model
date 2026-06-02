@@ -64,21 +64,17 @@ The richer models impose the prior that:
 - regime variables affect how those feature signals should be pooled,
   gated, split, or attended to.
 
-Examples:
+## Model Summaries
 
-- The partial-pooling regime ridge notebook uses regime variables to create
-  quantile groups. Each group gets a regularized deviation from a shared global
-  linear model, so the model can adapt to regimes without fitting a completely
-  separate model per regime bucket.
-- The mixture-of-experts notebook learns a soft regime-dependent combination of
-  simpler linear experts.
-- The transformer notebook tests architectures where feature tokens and regime
-  tokens are separate, with the selected architecture using one-way
-  regime-to-feature attention.
-- The XGBoost notebook uses interaction constraints so each feature can interact
-  with regime variables, while feature-feature interactions are restricted.
+### Base Linear Model
 
-## Partial-Pooling Regime Ridge
+The base model is a regularized linear return predictor using the `x*` feature
+columns directly. It is intentionally simple: the goal is to establish a stable
+walk-forward baseline in a low signal-to-noise setting before adding regime
+structure. Ridge regularization controls coefficient instability, and model
+selection is based on out-of-sample PnL/Sharpe rather than in-sample fit alone.
+
+### Partial-Pooling Regime Ridge
 
 The pooled model is better described as a partial-pooling regime ridge model. It
 is not a simple average of models. For a chosen regime variable, the training
@@ -94,6 +90,46 @@ prediction = x * beta_shared + x * delta_regime_bucket
 regularized, with separate penalties for the shared component and the
 regime-specific deviations. This gives a compromise between one global linear
 model and fully separate models per regime bucket.
+
+### Mixture Of Experts
+
+The mixture-of-experts model keeps the experts simple, usually ridge-style linear
+predictors, but lets the regime variables determine how much weight each expert
+gets. Conceptually:
+
+```text
+prediction = sum_k gate_k(regime) * expert_k(features)
+```
+
+This is a softer version of regime splitting. Instead of assigning each row to a
+single hard regime bucket, the model learns regime-dependent weights over
+multiple feature-based experts.
+
+### Directed-Regime Transformer
+
+The transformer notebook tests architectures that explicitly separate feature
+tokens from regime tokens. The selected structure is a directed-regime attention
+model:
+
+```text
+feature tokens -> feature self-attention
+regime tokens  -> regime self-attention
+regime tokens  -> feature tokens through one-way cross-attention
+feature tokens -> prediction head
+```
+
+The key prior is that features are the direct prediction variables, while regimes
+modify how feature signals interact. Regime tokens are not read out directly by
+the final head; they influence the feature representation first.
+
+### Interaction-Constrained XGBoost
+
+The XGBoost notebook uses gradient-boosted trees, but with interaction
+constraints that encode the same feature/regime distinction. Each `x*` feature
+is allowed to interact with the `cond*` regime variables, but `x*` features are
+restricted from freely interacting with other `x*` features. This makes each tree
+more like a regime-conditioned feature model rather than an unconstrained
+high-order feature interaction search.
 
 ## Train, Validation, And Test Protocol
 
