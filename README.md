@@ -34,8 +34,7 @@ Expected columns:
 The notebooks use a walk-forward protocol: preprocessing parameters are estimated
 on each training window and then applied to the held-out window.
 
-- Missing regime values: `cond2` and `cond3` are forward-filled and then
-  backward-filled for any leading missing rows.
+- Missing regime values: `cond2` and `cond3` are forward-filled for any leading missing rows.
 - Missing modeling rows: training rows with missing feature, regime, or target
   values are dropped; prediction rows with missing feature/regime values are
   dropped.
