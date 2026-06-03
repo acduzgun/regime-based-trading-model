@@ -165,21 +165,6 @@ restricted from freely interacting with other `x*` features. This makes each tre
 more like a regime-conditioned feature model rather than an unconstrained
 high-order feature interaction search.
 
-## Winning Model Test Performance
-
-The best-performing model is the `cond3` partial-pooling regime ridge model. The
-validation-period Sharpe is about `1.22` on 2021-2022, and the test-period
-Sharpe is about `1.42` on 2023-2024. The test-period cumulative PnL is strong
-and broadly consistent with the validation-period behavior.
-
-![pooled regression test pnl](figures/pooled_regression_test_pnl.svg)
-
-I evaluate test performance primarily with cumulative PnL and annualized daily
-Sharpe. Average return alone is not enough to validate the model. A more
-comprehensive robustness review should also include performance by regime,
-rank-IC analysis, time-of-day analysis, drawdown behavior, and stability across
-subperiods.
-
 ## Train, Validation, And Test Split
 
 I use two different training/validation/test protocols:
@@ -213,6 +198,22 @@ final test run retrains the selected configuration through `2023-06-30` and then
 predicts rows from `2023-07-01` onward. Thus validation data is allowed into the
 final training set only after model selection is complete; test rows remain held
 out.
+
+## Winning Model Test Performance
+
+The best-performing model is the `cond3` partial-pooling regime ridge model. The
+validation-period Sharpe is about `1.22` on 2021-2022, and the test-period
+Sharpe is about `1.42` on 2023-2024. The test-period cumulative PnL is strong
+and broadly consistent with the validation-period behavior.
+
+![pooled regression test pnl](figures/pooled_regression_test_pnl.svg)
+
+I evaluate test performance primarily with cumulative PnL and annualized daily
+Sharpe. Average return alone is not enough to validate the model. A more
+comprehensive robustness review should also include performance by regime,
+rank-IC analysis, time-of-day analysis, drawdown behavior, and stability across
+subperiods.
+
 
 For Modal-backed notebooks, upload the local data file once:
 
