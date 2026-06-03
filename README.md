@@ -47,12 +47,12 @@ Expected columns:
 The EDA notebook shows that the regime variables (`cond1`, `cond2`, and
 `cond3`) do not have stable distributions across the full sample. In particular,
 their distributions differ between the first and second half of the data. This
-kind of regime-variable shift can make flexible non-linear models harder to
+kind of regime-variable shift can make models (particularly flexible non-linear models) harder to
 train and validate reliably, because later validation or test periods may not
 look like the earlier training period.
 
 As one example, the distribution of `cond3` shifts between the first and second
-half of the sample:
+half of the data:
 
 ![cond3 distribution shift](figures/cond3_distribution_first_second_half.svg)
 
