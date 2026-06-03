@@ -214,6 +214,7 @@ comprehensive robustness review should also include performance by regime,
 rank-IC analysis, time-of-day analysis, drawdown behavior, and stability across
 subperiods.
 
+## Running Modal Notebooks
 
 For Modal-backed notebooks, upload the local data file once:
 
