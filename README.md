@@ -23,6 +23,12 @@ competitive in this setting. I also tested transformer and XGBoost models, but
 with structural assumptions that separate feature variables from regime variables
 instead of treating every input column as interchangeable.
 
+# Data
+
+Dataset has features and regime variables at the minute level for oil futures. There is no information on how those 
+feature/regime variables are constructed. The goal is to come up with a predictive model to predict given target.
+Transaction costs are ignored. Features are slow (high auto0-correlation).
+
 The raw dataset is not included. To reproduce the notebooks, place the input parquet file at:
 
 ```text
