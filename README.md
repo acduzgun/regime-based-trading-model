@@ -11,6 +11,10 @@ features.
 - Transformer model
 - XGBoost model
 
+Each implemented idea is illustrated in the `notebooks/` folder. The clear
+winner is the pooled regression model, which shows good validation and test
+performance.
+
 The main empirical takeaway is that simple, strongly regularized models are often
 competitive in this setting. I also tested transformer and XGBoost models, but
 with structural assumptions that separate feature variables from regime variables
