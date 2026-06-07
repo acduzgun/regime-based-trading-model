@@ -1,9 +1,27 @@
 # Regime-Based Trading Model Research
 
-Research notebooks for comparing regime-aware return prediction models in a low
-signal-to-noise financial forecasting setting. The central modeling question is
-whether regime variables should be treated differently from the direct predictive
-features.
+## Problem Definition
+
+The task is to predict `ret_fopen` in a low signal-to-noise financial forecasting
+setting using the provided market features and regime variables. The central
+modeling question is whether regime variables should be treated differently from
+the direct predictive features.
+
+The feature and regime variable sets are fixed by the problem definition and are
+not changed in this project:
+
+- `x*` columns are the fixed feature variables used as direct return-prediction
+  signals.
+- `cond*` columns are the fixed regime variables used to change how feature
+  signals are interpreted.
+
+The research therefore focuses on preprocessing, validation design, and model
+structure around these fixed inputs, not on feature discovery or regime-variable
+selection.
+
+## Research Scope
+
+This repository compares regime-aware return prediction models:
 
 - Base linear model
 - Mixture-of-experts model
@@ -11,23 +29,22 @@ features.
 - Transformer model
 - XGBoost model
 
-The `notebooks/eda.ipynb` notebook organizes the original exploratory checks
-used before the modeling notebooks.
-
 Each implemented idea is illustrated in the `notebooks/` folder. The clear
 winner is the pooled regression model, which shows good validation and test
 performance.
 
-The main empirical takeaway is that simple, strongly regularized models are often
-competitive in this setting. I also tested transformer and XGBoost models, but
-with structural assumptions that separate feature variables from regime variables
-instead of treating every input column as interchangeable.
+The main empirical takeaway is that simple, strongly regularized linear models
+are often competitive in this setting. Non-linear transformer and XGBoost models
+are explored as additional experiments, but only with structural assumptions that
+separate feature variables from regime variables instead of treating every input
+column as interchangeable.
 
-# Data
+## Dataset Context
 
-Dataset has features and regime variables at the minute level for oil futures. There is no information on how those 
-feature/regime variables are constructed. The goal is to come up with a predictive model to predict given target.
-Transaction costs are ignored. Features are slow (high auto0-correlation).
+The dataset has features and regime variables at the minute level. There is no
+information on how those feature/regime variables are constructed. The goal is
+to build a predictive model for the given target. Transaction costs are ignored.
+Features are slow-moving and highly autocorrelated.
 
 The raw dataset is not included. To reproduce the notebooks, place the input parquet file at:
 
@@ -42,26 +59,42 @@ Expected columns:
 - `x*`: feature columns used as direct return-prediction signals
 - `cond*`: regime/conditioning columns used to change how feature signals are interpreted
 
-## EDA Observations
+## EDA Notes
 
-The EDA notebook shows that the regime variables (`cond1`, `cond2`, and
-`cond3`) do not have stable distributions across the full sample. In particular,
-their distributions differ between the first and second half of the data. This
-kind of regime-variable shift can make models (particularly flexible non-linear models) harder to
-train and validate reliably, because later validation or test periods may not
-look like the earlier training period.
+The EDA summary shows that the regime variables (`cond1`, `cond2`, and `cond3`)
+do not have stable distributions across the full sample. In particular, their
+distributions differ between the first and second half of the data. This kind of
+regime-variable shift can make flexible non-linear models harder to train and
+validate reliably, because later validation or test periods may not look like the
+earlier training period.
 
 As one example, the distribution of `cond3` shifts between the first and second
 half of the data:
 
 ![cond3 distribution shift](figures/cond3_distribution_first_second_half.svg)
 
+The target return scale also changes through time. The rolling-volatility check
+is shown both on raw returns and on returns clipped at the 1st and 99th
+percentiles, because the modeling target remains in raw return units while the
+training objective uses winsorization to reduce the influence of extreme target
+observations.
+
+![rolling target volatility](figures/rolling_target_volatility.svg)
+
+Feature variables are already normalized, but their tails still matter for
+clipping and regularization decisions. The summary below shows that the feature
+columns are roughly centered and scaled, while the raw extrema can be much wider
+than the central quantiles.
+
+![feature summary statistics](figures/feature_summary_stats.svg)
+
 The feature variables also show high autocorrelation. As a result, the effective
 sample size is smaller than the raw row count suggests. Combined with noisy
-returns and shifting regime variables, this motivated longer training periods
-for the more complex transformer and XGBoost experiments.
+returns, shifting regime variables, and time-varying target volatility, this
+motivated longer training periods for the more complex transformer and XGBoost
+experiments.
 
-## Data
+## Data Pre-Processing
 
 The notebooks use a walk-forward protocol: preprocessing parameters are estimated
 on each training window and then applied to the held-out window.
@@ -92,17 +125,21 @@ on each training window and then applied to the held-out window.
 
 ## Modeling Assumption
 
-The dataset is treated as a low signal-to-noise problem, so the baseline emphasis
-is on regularized linear structure and stable walk-forward validation rather than
-large unconstrained models.
+The dataset is treated as a low signal-to-noise problem, so the main models are
+regularized linear models with stable walk-forward validation rather than large
+unconstrained models.
 
-When designing the models in this high-noise setting, I aim to build models with the following structural assumptions:
+When designing models in this high-noise setting, I use the following structural
+assumptions:
 
 - feature variables carry the direct return-prediction signal;
 - regime variables affect how those feature signals should be pooled,
   gated, split, or attended to.
 
-So, I incorporate my prior in the model building.
+The non-linear models are exploratory. When using them, I add structural
+assumptions to overcome the high noise: the transformer uses directed
+feature/regime attention, and XGBoost uses interaction constraints so the model
+cannot freely search all high-order feature interactions.
 
 ## Model Summaries
 
@@ -111,8 +148,7 @@ So, I incorporate my prior in the model building.
 The base model is a regularized linear return predictor using the `x*` feature
 columns directly. It is intentionally simple: the goal is to establish a stable
 walk-forward baseline in a low signal-to-noise setting before adding regime
-structure. The goal is to provide a simple baseline to compare with the other models.
-
+structure and to provide a simple baseline for comparison.
 
 ### Partial-Pooling Regime Ridge
 
