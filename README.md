@@ -1,27 +1,23 @@
-# Regime-Based Trading Model Research
+# Regime-Based Model Research for Futures Trading
 
 ## Problem Definition
 
-The task is to predict `ret_fopen` in a low signal-to-noise financial forecasting
-setting using the provided market features and regime variables. The central
-modeling question is whether regime variables should be treated differently from
-the direct predictive features.
+The task is to predict intaday oil futures returns (which is a low signal-to-noise financial forecasting
+setting) using the provided features and regime variables which are provided at the minute level frequency.
 
-The feature and regime variable sets are fixed by the problem definition and are
-not changed in this project:
+The main modelling assumption is not to use regime variables directly to predict the returns but use them to 
+define a regime which changes the model/features behaviour.
+
+No additional feature engineering is applied on features or regime variables by the problem definition:
 
 - `x*` columns are the fixed feature variables used as direct return-prediction
   signals.
 - `cond*` columns are the fixed regime variables used to change how feature
   signals are interpreted.
 
-The research therefore focuses on preprocessing, validation design, and model
-structure around these fixed inputs, not on feature discovery or regime-variable
-selection.
-
 ## Research Scope
 
-This repository compares regime-aware return prediction models:
+This repository mainly compares regime-aware return prediction models:
 
 - Base linear model
 - Mixture-of-experts model
