@@ -1,48 +1,26 @@
-# Regime-Based Model Research for Futures Trading
+# Regime-Aware Futures Return Modeling
 
-## Problem Definition
+This repository presents a research workflow for predicting intraday futures
+returns from a minute-level dataset. The project is framed as a
+low signal-to-noise forecasting problem: returns are noisy, the target volatility
+changes through time, and the regime variables shift across the sample.
 
-The task is to predict intaday oil futures returns (which is a low signal-to-noise financial forecasting
-setting) using the provided features and regime variables which are provided at the minute level frequency.
+The main modeling idea is simple:
 
-The main modelling assumption is not to use regime variables directly to predict the returns but use them to 
-define a regime which changes the model/features behaviour.
+- `x*` columns are treated as direct return-prediction signals.
+- `cond*` columns are treated as regime variables that change how the feature
+  signals should be pooled, gated, split, or attended to.
 
-No additional feature engineering is applied on features or regime variables by the problem definition:
+I started with three interpretable regime-aware models, then added nonlinear
+tree and transformer experiments. The strongest and most stable result came
+from pooling based ridge model, while the more flexible models showed
+strong validation performance but weaker final test behavior.
 
-- `x*` columns are the fixed feature variables used as direct return-prediction
-  signals.
-- `cond*` columns are the fixed regime variables used to change how feature
-  signals are interpreted.
+## Problem And Modeling Thesis
 
-## Research Scope
-
-This repository mainly compares regime-aware return prediction models:
-
-- Base linear model
-- Mixture-of-experts model
-- Partial-pooling regime ridge model
-- Transformer model
-- XGBoost model
-
-Each implemented idea is illustrated in the `notebooks/` folder. The clear
-winner is the pooled regression model, which shows good validation and test
-performance.
-
-The main empirical takeaway is that simple, strongly regularized linear models
-are often competitive in this setting. Non-linear transformer and XGBoost models
-are explored as additional experiments, but only with structural assumptions that
-separate feature variables from regime variables instead of treating every input
-column as interchangeable.
-
-## Dataset Context
-
-The dataset has features and regime variables at the minute level. There is no
-information on how those feature/regime variables are constructed. The goal is
-to build a predictive model for the given target. Transaction costs are ignored.
-Features are slow-moving and highly autocorrelated.
-
-The raw dataset is not included. To reproduce the notebooks, place the input parquet file at:
+The task is to predict intraday futures returns from a fixed set of feature and
+conditioning variables. No raw data is committed to this repository.
+To reproduce the notebooks locally, place the input parquet file at:
 
 ```text
 data/model_data.parquet
@@ -50,138 +28,111 @@ data/model_data.parquet
 
 Expected columns:
 
-- `trade_date`: timestamp or date-like column
-- `ret_fopen`: target return column
-- `x*`: feature columns used as direct return-prediction signals
-- `cond*`: regime/conditioning columns used to change how feature signals are interpreted
+- `msgStamp`: timestamp column used for chronological ordering.
+- `trade_date`: trading date used to aggregate daily PnL.
+- `ret_fopen`: target return column.
+- `x*`: feature columns used as direct return-prediction signals.
+- `cond*`: conditioning/regime columns used to alter model behavior.
 
-## EDA Notes
+The key modeling choice is to avoid treating all columns as interchangeable.
+Instead, the models encode the hypothesis that features predict returns, while
+regime variables change the usefulness or combination of those feature signals.
+This structure matters because flexible models can easily overfit noisy returns
+when they are allowed to search arbitrary interactions.
 
-The EDA summary shows that the regime variables (`cond1`, `cond2`, and `cond3`)
-do not have stable distributions across the whole period. In particular, their
-distributions differ between the first and second half of the data. This kind of
-regime-variable shift can make flexible non-linear models harder to train and
-validate reliably, because validation/test periods will have a different distribution
-of regime variables than the training period.
+## Data And EDA Findings
 
-As one example, the distribution of `cond3` shifts between the first and second
-half of the data:
+The dataset contains minute-level observations, but the effective sample size is
+smaller than the row count suggests because the features are slow-moving and
+highly autocorrelated. The target return scale also changes over time, which
+makes model selection more fragile.
+
+The regime variables are not distributionally stable. For example, `cond3`
+changes visibly between the first and second half of the sample:
 
 ![cond3 distribution shift](figures/cond3_distribution_first_second_half.svg)
 
-The target return scale also changes through time. The rolling-volatility check
-is shown both on raw returns and on returns clipped at the 1st and 99th
-percentiles, because the modeling target remains in raw return units while the
-training objective uses winsorization to reduce the influence of extreme target
-observations.
+The rolling target-volatility check shows why the training objective needs to be
+robust to large target observations:
 
 ![rolling target volatility](figures/rolling_target_volatility.svg)
 
-Feature variables are already normalized, but their tails still matter for
-clipping and regularization decisions. The summary below shows that the feature
-columns are roughly centered and scaled, while the raw extrema can be much wider
-than the central quantiles.
+The feature columns are roughly centered and scaled, but their tails still
+matter for clipping and regularization:
 
 ![feature summary statistics](figures/feature_summary_stats.svg)
 
-The feature variables also show high autocorrelation. As a result, the effective
-sample size is smaller than the raw row count suggests. Combined with noisy
-returns, shifting regime variables, and time-varying target volatility, this
-motivated longer training periods for the more complex transformer and XGBoost
-experiments.
+These observations motivated a conservative workflow: walk-forward validation,
+strong regularization, and model structures that keep a clear separation between
+return features and regime variables.
 
-## Data Pre-Processing
+## Preprocessing And Backtest Protocol
 
-The notebooks use a walk-forward protocol: preprocessing parameters are estimated
-on each training window and then applied to the held-out window.
+The notebooks use time-aware preprocessing. Parameters are estimated on the
+training window and then applied to the held-out window.
 
-- Missing regime values: `cond2` and `cond3` are forward-filled for any leading missing rows.
+- Missing regime values: `cond2` and `cond3` are forward-filled, then
+  backward-filled only for any leading missing rows.
 - Missing modeling rows: training rows with missing feature, regime, or target
-  values are dropped; prediction rows with missing feature/regime values are
+  values are dropped; prediction rows with missing feature or regime values are
   dropped.
-- Features are already normalized, so no extra normalization is applied.
 - Feature outliers: `x*` features are clipped to `[-3, 3]`.
-- Training target outliers: `ret_fopen` is winsorized only inside the training
-  window used to fit the model, using the 1st and 99th percentiles. This is used
-  to reduce the influence of extreme target observations during estimation.
-- Target volatility scaling: `ret_fopen` is not volatility-scaled. I assume the
-  strategy trades the same gross amount regardless of recent volatility, and the
-  PnL computation uses raw realized returns with clipped predictions as position
-  sizes. This keeps the modeling target aligned with the backtest objective, but
-  it also makes the prediction problem harder because the target scale is less
-  stable across time.
-- Regime variables: `cond*` variables are winsorized on the training window using
-  the 1st and 99th percentiles, standardized using training-window mean/std, and
-  finally clipped to `[-5, 5]`.
-- Backtest returns: realized `ret_fopen` values are not clipped or winsorized in
-  the backtest.
-- Backtest signal: predictions are clipped to `[-3, 3]` before computing daily
-  PnL and Sharpe, so clipping applies to position sizing rather than realized
-  returns.
+- Training target outliers: `ret_fopen` is winsorized inside each training
+  window at the 1st and 99th percentiles.
+- Regime variables: `cond*` variables are winsorized on the training window,
+  standardized using training-window mean/std, and clipped to `[-5, 5]`.
+- Backtest returns: realized `ret_fopen` values are not clipped or winsorized.
+- Backtest signal: predictions are clipped to `[-3, 3]` before daily PnL and
+  Sharpe are computed.
 
-## Modeling Assumption
+Transaction costs are not included, so the results should be read as research
+signals rather than deployment-ready trading performance.
 
-The dataset is treated as a low signal-to-noise problem, so the main models are
-regularized linear models with stable walk-forward validation rather than large
-unconstrained models.
+## Model Progression
 
-When designing models in this high-noise setting, I use the following structural
-assumptions:
+### 1. Initial Regime Models
 
-- feature variables carry the direct return-prediction signal;
-- regime variables affect how those feature signals should be pooled,
-  gated, split, or attended to.
+The first research pass focused on interpretable, regularized models:
 
-The non-linear models are exploratory. When using them, I add structural
-assumptions to overcome the high noise: the transformer uses directed
-feature/regime attention, and XGBoost uses interaction constraints so the model
-cannot freely search all high-order feature interactions.
-
-## Model Summaries
-
-### Base Linear Model
-
-The base model is a regularized linear return predictor using the `x*` feature
-columns directly. It is intentionally simple: the goal is to establish a stable
-walk-forward baseline in a low signal-to-noise setting before adding regime
-structure and to provide a simple baseline for comparison.
-
-### Partial-Pooling Regime Ridge
-
-The pooled model is better described as a partial-pooling regime ridge model. It
-is not a simple average of models. For a chosen regime variable, the training
-data is split into quantile buckets using training-window quantiles. The model
-then fits:
+- **Global linear ridge:** a simple baseline using only `x*` features as direct
+  predictors.
+- **Mixture of experts:** several ridge-style feature experts are combined using
+  regime-dependent gating weights.
+- **Partial-pooling regime ridge:** each regime bucket gets an adjustment around
+  a shared global linear signal:
 
 ```text
 prediction = x * beta_shared + x * delta_regime_bucket
 ```
 
-`beta_shared` is the global linear signal shared across all observations.
-`delta_regime_bucket` is the regime-specific adjustment. Both pieces are ridge
-regularized, with separate penalties for the shared component and the
-regime-specific deviations. This gives a compromise between one global linear
-model and fully separate models per regime bucket.
+The partial-pooling model is the most important result in the project. It is
+more expressive than one global linear model, but it avoids the instability of
+fully separate models per regime.
 
-### Mixture Of Experts
+![initial model pnl comparison](figures/readme_initial_models_pnl.png)
 
-The mixture-of-experts model keeps the experts simple, usually ridge-style linear
-predictors, but lets the regime variables determine how much weight each expert
-gets. Conceptually:
+| Model | Selection period | Sharpe | Average return | Final test Sharpe | Notes |
+|---|---:|---:|---:|---:|---|
+| Global linear ridge | through 2022 | 0.45 | 0.00047 | 0.13 | Stable baseline, weak standalone signal |
+| Mixture of experts | through 2022 | 1.19 | 0.00152 | 1.31 | Stronger regime adaptation, less interpretable |
+| Partial-pooling regime ridge (`cond3`) | through 2022 | 1.22 | 0.00118 | 1.42 | Best stability and strongest final test result |
 
-```text
-prediction = sum_k gate_k(regime) * expert_k(features)
-```
+In the initial-model plot, `pred_hier` is the partial-pooling regime ridge
+signal and `pred_avg` is a simple average of MoE and partial-pooling signals.
 
-This is a softer version of regime splitting. Instead of assigning each row to a
-single hard regime bucket, the model learns regime-dependent weights over
-multiple feature-based experts.
+### 2. Later Nonlinear Models
 
-### Directed-Regime Transformer
+After the initial report, I added two more flexible model families while keeping
+the same feature/regime distinction.
 
-The transformer notebook tests architectures that explicitly separate feature
-tokens from regime tokens. The selected structure is a directed-regime attention
-model:
+- **Interaction-constrained XGBoost:** each `x*` feature can interact with the
+  `cond*` regime variables, but `x*` features are restricted from freely
+  interacting with each other. This makes the tree model behave like a
+  regime-conditioned feature model instead of an unconstrained interaction
+  search.
+- **Directed-regime transformer:** feature tokens and regime tokens are modeled
+  in separate streams. Regime tokens can influence feature tokens through
+  one-way cross-attention, but the prediction head reads out feature tokens only.
 
 ```text
 feature tokens -> feature self-attention
@@ -190,71 +141,35 @@ regime tokens  -> feature tokens through one-way cross-attention
 feature tokens -> prediction head
 ```
 
-The key prior is that features are the direct prediction variables, while regimes
-modify how feature signals interact. Regime tokens are not read out directly by
-the final head; they influence the feature representation first.
+![later model pnl comparison](figures/readme_later_models_pnl.png)
 
-### Interaction-Constrained XGBoost
+| Model | Validation period | Validation Sharpe | Validation return | Test Sharpe | Test return | Takeaway |
+|---|---:|---:|---:|---:|---:|---|
+| Interaction-constrained XGBoost | 2022-01-01 to 2023-06-30 | 2.25 | 0.00343 | 0.69 | 0.00062 | Very strong validation, weaker final test |
+| Directed-regime transformer, 3-seed ensemble | 2022-01-02 to 2023-06-30 | 1.33 | 0.00210 | 0.52 | 0.00047 | Directionally useful, sensitive to split and seed |
 
-The XGBoost notebook uses gradient-boosted trees, but with interaction
-constraints that encode the same feature/regime distinction. Each `x*` feature
-is allowed to interact with the `cond*` regime variables, but `x*` features are
-restricted from freely interacting with other `x*` features. This makes each tree
-more like a regime-conditioned feature model rather than an unconstrained
-high-order feature interaction search.
+## Main Takeaways
 
-## Train, Validation, And Test Split
+The most useful result is not just that one model won. The stronger lesson is
+that structural assumptions mattered more than model complexity.
 
-I use two different training/validation/test protocols:
+- Simple regularized models were competitive because the return target is noisy
+  and the features are autocorrelated.
+- Regime variables were useful, but mainly as conditioning variables rather than
+  direct return predictors.
+- The flexible models found validation signal, but their final test results were
+  less stable than the partial-pooling ridge model.
+- The best-performing model was the `cond3` partial-pooling regime ridge, with a
+  validation Sharpe around `1.22` and a final test Sharpe around `1.42`.
 
-- one for the linear, partial-pooling regime ridge, and mixture-of-experts
-  models; and
-- one for the transformer and XGBoost models.
+The next research steps would be robustness checks by regime, rank-IC analysis,
+time-of-day analysis, drawdown review, transaction-cost sensitivity, and
+subperiod stability.
 
-For the linear, partial-pooling regime ridge, and mixture-of-experts notebooks,
-evaluation is walk-forward by calendar year. With the default expanding-window
-setup, the model starts after at least four training years are available. For
-each prediction year, it trains on all earlier eligible years, predicts the next
-year, then expands the training set to include that year before moving forward.
-This gives out-of-sample yearly predictions while preserving time order.
+## Modal-Backed Notebooks
 
-For the transformer and XGBoost notebooks, the main model-selection protocol is a
-fixed split:
-
-- Training period: all rows through `2021-12-31`.
-- Outer validation period: `2022-01-01` through `2023-06-30`.
-- Inner validation: a chronological tail slice from the training period, used
-  for early stopping and learning-curve diagnostics.
-- Test period: starts on `2023-07-01`.
-
-Because the data is noisy, the effective sample size is reduced by feature
-autocorrelation, and the regime-variable distributions shift over time, I use a
-longer training period for the more complex transformer and XGBoost models.
-
-After selecting the model/hyperparameters on the outer validation period, the
-final test run retrains the selected configuration through `2023-06-30` and then
-predicts rows from `2023-07-01` onward. Thus validation data is allowed into the
-final training set only after model selection is complete; test rows remain held
-out.
-
-## Winning Model Test Performance
-
-The best-performing model is the `cond3` partial-pooling regime ridge model. The
-validation-period Sharpe is about `1.22` on 2021-2022, and the test-period
-Sharpe is about `1.42` on 2023-2024. The test-period cumulative PnL is strong
-and broadly consistent with the validation-period behavior.
-
-![pooled regression test pnl](figures/pooled_regression_test_pnl.svg)
-
-I evaluate test performance primarily with cumulative PnL and annualized daily
-Sharpe. Average return alone is not enough to validate the model. A more
-comprehensive robustness review should also include performance by regime,
-rank-IC analysis, time-of-day analysis, drawdown behavior, and stability across
-subperiods.
-
-## Running Modal Notebooks
-
-For Modal-backed notebooks, upload the local data file once:
+Some experiments are configured to run with Modal. Upload the local data file
+once and deploy the helper:
 
 ```bash
 python modal_train.py upload
