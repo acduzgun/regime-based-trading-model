@@ -1,7 +1,7 @@
 # Regime-Aware Futures Return Modeling
 
 This repository presents a research workflow for predicting intraday futures
-returns from a minute-level dataset. The project is framed as a
+returns from a minute-level dataset for a single asset type. The project is framed as a
 low signal-to-noise forecasting problem: returns are noisy, the target volatility
 changes through time, and the regime variables shift across the sample.
 
@@ -30,7 +30,7 @@ Expected columns:
 
 - `msgStamp`: timestamp column used for chronological ordering.
 - `trade_date`: trading date used to aggregate daily PnL.
-- `ret_fopen`: target return column.
+- `ret_fopen`: target return column - raw forward return.
 - `x*`: feature columns used as direct return-prediction signals.
 - `cond*`: conditioning/regime columns used to alter model behavior.
 
@@ -85,8 +85,8 @@ training window and then applied to the held-out window.
 - Backtest signal: predictions are clipped to `[-3, 3]` before daily PnL and
   Sharpe are computed.
 
-Transaction costs are not included, so the results should be read as research
-signals rather than deployment-ready trading performance.
+Transaction costs are ignored. The features have low autocorrelations and so slow changing.
+Hence, transaction costs can be lower for a linear model.
 
 ## Model Progression
 
@@ -95,15 +95,26 @@ signals rather than deployment-ready trading performance.
 The first research pass focused on interpretable, regularized models:
 
 - **Global linear ridge:** a simple baseline using only `x*` features as direct
-  predictors.
-- **Mixture of experts:** several ridge-style feature experts are combined using
-  regime-dependent gating weights.
-- **Partial-pooling regime ridge:** each regime bucket gets an adjustment around
-  a shared global linear signal:
+  predictors. It ignores the regime effect and serves a baseline helping us
+  understand the contribution of the regime.
+- **Partial-pooling regime ridge:** This model separates each regime variable into 3 quantiles 
+  using rolling distribution and then build a separate Ridge regression model for each quantile.
+  For simplicity, we do not consider the interaction effects between the regime variable and build
+  a different model for each feature. Similarly, we use only 3 quantiles (most intuitive number of quantiles)
+  for simplicity but different number of quantiles can be tested.
 
-```text
-prediction = x * beta_shared + x * delta_regime_bucket
-```
+  Another alternative way of deciding on the regimes could be doing a clustring like K-keans or hierarchical.
+  Also, we could decide on the regime by setting a theshold on the z-score like mean+/- k*std. That can be also
+  tested. This kind of thresholding can result in more meaningful groups but the groups could be sparse and would
+  have unequal size.
+- **Mixture of experts:** Several ridge-style feature experts are combined using
+  regime-dependent gating weights. The regime is determined by a logistic regression model
+  (gating model) and each regime's (expert's) predictive model a Ridge regresssion model.
+  The model is trained by EM algorithm in a way gating model and expert models are fitted
+  iteratively. This model is more flexible compared the partial pooling model but it
+  is harder to train with more hyperparameters. That flexibility is at the cost of overfitting
+  which is often the issue with the more complex models when it comes to the financial data -
+  especially with the lower coverage and short history.
 
 The partial-pooling model is the most important result in the project. It is
 more expressive than one global linear model, but it avoids the instability of
@@ -132,7 +143,9 @@ the same feature/regime distinction.
   search.
 - **Directed-regime transformer:** feature tokens and regime tokens are modeled
   in separate streams. Regime tokens can influence feature tokens through
-  one-way cross-attention, but the prediction head reads out feature tokens only.
+  one-way cross-attention, but the prediction head reads out feature tokens only. The idea here is
+  to have the regime variables in the attention mechanism but define them in a different way
+  than the features.
 
 ```text
 feature tokens -> feature self-attention
