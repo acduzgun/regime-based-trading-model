@@ -133,8 +133,9 @@ signal and `pred_avg` is a simple average of MoE and partial-pooling signals.
 
 ### 2. Later Nonlinear Models
 
-After the initial report, I added two more flexible model families while keeping
-the same feature/regime distinction.
+I also explore transformers and tree models as non-linear model alternative. 
+For these models, I make a distinction between features and regime variables
+in model desgin and do not treat them in the same way.
 
 - **Interaction-constrained XGBoost:** each `x*` feature can interact with the
   `cond*` regime variables, but `x*` features are restricted from freely
@@ -145,7 +146,10 @@ the same feature/regime distinction.
   in separate streams. Regime tokens can influence feature tokens through
   one-way cross-attention, but the prediction head reads out feature tokens only. The idea here is
   to have the regime variables in the attention mechanism but define them in a different way
-  than the features.
+  than the features. Note that it is natural to use autoregressive features in tranformers but I
+  do not use autoregressive features to make the comparison equal footing. There are different ways
+  of designing transfomers. I pick the following design because I want to use attention mechanism to figure
+  out the non-linear relationships between features and regime variables.
 
 ```text
 feature tokens -> feature self-attention
